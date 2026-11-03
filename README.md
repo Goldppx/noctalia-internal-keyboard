@@ -28,6 +28,14 @@ internal-keyboard off        # the graphical session stops seeing this keyboard
 - **No polling of the desktop**: the state is read from the udev database, so suspend/resume and
   TTY toggles stay consistent
 
+## Screenshots
+
+| Control center — keyboard off | Control center — keyboard on | OSD on every toggle |
+| --- | --- | --- |
+| ![Control center tile highlighted, built-in keyboard disabled](docs/screenshots/control-center-off.png) | ![Control center tile normal, built-in keyboard enabled](docs/screenshots/control-center-on.png) | ![OSD popup showing the new keyboard state](docs/screenshots/osd.webp) |
+
+![Plugin settings: backend path, keyboard name, OSD toggle and refresh interval](docs/screenshots/settings.png)
+
 ## Requirements
 
 | Requirement | Why |
