@@ -82,16 +82,23 @@ bindsym $mod+Shift+k exec noctalia msg plugin goldesquemoon/internal-keyboard:se
 From a terminal or TTY:
 
 ```sh
-internal-keyboard status     # state=on|off, device=..., available=0|1, nodes=...
-internal-keyboard devices    # keyboards that can be switched, * marks the current one
-internal-keyboard off
-internal-keyboard on
-internal-keyboard toggle
-internal-keyboard select     # root; same as the Keyboard setting
+internal-keyboard status              # state=on|off, device=..., available=0|1, nodes=...
+internal-keyboard devices             # keyboards that can be switched, * marks the current one
+sudo internal-keyboard off
+sudo internal-keyboard on
+sudo internal-keyboard toggle
+sudo internal-keyboard select NAME    # also what the Keyboard setting does
 ```
 
-`status` and `devices` need no privileges; the rest use the passwordless sudo rule. Toggling
-from a TTY is the way back when the internal keyboard is the one that got disabled.
+`status` and `devices` are read-only and need no privileges. The four state-changing
+subcommands need root; the backend never elevates itself, the sudoers entry that
+`setup.sh` installs only makes that `sudo` call work without a password prompt. Toggling
+from a TTY is the way back when the internal keyboard is the one that got disabled:
+
+```sh
+# on a text console, after Ctrl+Alt+F2 and logging in
+sudo internal-keyboard on
+```
 
 ## Settings
 
@@ -125,7 +132,7 @@ noctalia msg plugin goldesquemoon/internal-keyboard:service all refresh
   reboot and the keyboard always comes back.
 - **The TTY keeps the keyboard.** The kernel side (`i8042`/`atkbd`) is untouched; only
   libinput clients ignore the device. That is what makes `Ctrl+Alt+F2` plus
-  `internal-keyboard on` a reliable recovery path.
+  `sudo internal-keyboard on` a reliable recovery path.
 - **Privileges.** The sudoers entry is limited to four subcommands of one root-owned script
   that the user cannot modify. `select` validates the name against the keyboards the kernel
   currently exposes before it rewrites the udev rule, so it cannot be used to inject arbitrary

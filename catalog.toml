@@ -7,7 +7,7 @@
 [[plugin]]
 id = "goldesquemoon/internal-keyboard"
 name = "Internal Keyboard"
-version = "1.2.0"
+version = "1.2.1"
 author = "goldesquemoon"
 license = "MIT"
 icon = "keyboard"

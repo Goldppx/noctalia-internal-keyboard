@@ -178,21 +178,20 @@ devices() {
     done
 }
 
-# The rule names exactly one keyboard, so `select` rewrites these two lines
-# instead of keeping a list in sync. The unconditional "0" rule runs first and
-# clears the property, which keeps a previously selected keyboard from staying
-# ignored after the switch.
+# Both rules match one device name, so this plugin never touches the ignore
+# policy of any other input device. Selecting another keyboard re-announces the
+# old and the new event node, which is enough to drop a property that no rule
+# sets any more.
 write_rule() { # $1 = device name
     cat >"$RULE" <<EOF
 # Keyboard switch for goldesquemoon/internal-keyboard. Do not edit.
 #
-# Both rules run for every input event node: the first clears the property so a
-# previous selection cannot linger, the second makes libinput ignore the
-# selected keyboard while /run/internal-keyboard/disabled exists. libinput reads
-# the property only when a device appears, which is why the backend re-announces
-# the event node instead of sending a plain udev "change" event.
-ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ENV{LIBINPUT_IGNORE_DEVICE}="0"
+# Only the selected keyboard is matched: ignore policies that other rules set
+# for unrelated devices are left untouched. libinput reads the property only when
+# a device appears, which is why the backend re-announces the event node instead
+# of sending a plain udev "change" event.
 ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="$1", TEST=="/run/internal-keyboard/disabled", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="$1", TEST!="/run/internal-keyboard/disabled", ENV{LIBINPUT_IGNORE_DEVICE}="0"
 EOF
     chmod 0644 "$RULE"
 }
