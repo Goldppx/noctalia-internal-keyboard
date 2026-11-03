@@ -11,6 +11,14 @@ disabled keyboard can always be re-enabled without unplugging anything or reboot
 | ID | `goldesquemoon/internal-keyboard` |
 | Entries | Service: `service`; shortcut: `toggle`; bar widget: `keyboard` |
 
+## Screenshots
+
+| Control center — keyboard off | Control center — keyboard on | OSD on every toggle |
+| --- | --- | --- |
+| ![control center tile highlighted](https://raw.githubusercontent.com/Goldppx/noctalia-internal-keyboard/main/docs/screenshots/control-center-off.png) | ![control center tile normal](https://raw.githubusercontent.com/Goldppx/noctalia-internal-keyboard/main/docs/screenshots/control-center-on.png) | ![OSD popup](https://raw.githubusercontent.com/Goldppx/noctalia-internal-keyboard/main/docs/screenshots/osd.webp) |
+
+![plugin settings](https://raw.githubusercontent.com/Goldppx/noctalia-internal-keyboard/main/docs/screenshots/settings.png)
+
 ## Requirements
 
 | Requirement | Why |
