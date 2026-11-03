@@ -1,98 +1,184 @@
-# Noctalia Internal Keyboard
+# Noctalia Internal Keyboard — disable the built-in laptop keyboard in niri / Wayland (Noctalia v5 plugin)
 
-[Noctalia](https://noctalia.dev) v5 插件：[`internal-keyboard`](internal-keyboard/README.md) ——
-把笔记本内置键盘在图形会话里关掉（用外接键盘时），随时再打开。控制中心磁贴一键切换、可选的栏挂件、
-切换时的 OSD 提示，关闭状态按需持久化到下次开机前。
+A [Noctalia](https://noctalia.dev) v5 plugin that **turns the built-in laptop keyboard off** while
+an external keyboard is in use, and back on when you need it — from a control-center tile, an
+optional bar widget, an OSD popup, or a TTY.
 
-关键点：**只关 libinput 这一层**，内核照样把按键喂给 TTY 控制台，所以键盘被关掉后
-`Ctrl+Alt+F2` + `internal-keyboard on` 永远能救回来。
+The switch happens on the **libinput** layer, so the kernel keeps feeding the TTY consoles: if the
+internal keyboard is the one that just got disabled, `Ctrl+Alt+F2` plus `internal-keyboard on`
+still works. No reboot, no unplugging, no lockout.
 
-本仓库按官方 `/noctalia-dev/official-plugins`、`/noctalia-dev/community-plugins` 的目录规范
-组织，可直接作为 `path` / `git` 源使用；同一份代码已提交到社区插件商店（见下方 PR）。
+![Internal Keyboard](internal-keyboard/thumbnail.webp)
 
-```
-catalog.toml          # 源索引：每个插件一行 [[plugin]]
-.luaurc               # Luau languageMode = nonstrict
-install.sh            # 注册本仓库为 path 源并启用插件
-uninstall.sh          # 卸载（--purge 同时删除后端）
-tests/smoke.sh        # 清单/入口/翻译/后端自检（CI 也跑这个）
-.github/workflows/    # checks
-internal-keyboard/    # 目录名 = 插件 id 中 "/" 之后的部分
+```sh
+internal-keyboard status     # state=on|off, device=..., available=0|1, nodes=...
+internal-keyboard off        # the graphical session stops seeing this keyboard
 ```
 
-## 安装
+## Features
+
+- **Control-center tile** (highlighted = keyboard disabled) and optional **bar widget**
+- **OSD popup** on every toggle, with the usual muted look for the "off" state — can be turned off
+- **TTY-safe by design**: only libinput ignores the device, `i8042`/`atkbd` stays untouched, so a
+  text console always has a keyboard
+- **Any keyboard can be switched**, not just `i8042/serio0`: pick it by name in the settings
+  (`internal-keyboard devices` lists the candidates)
+- **Boot default is enabled**: the flag lives in `/run` (tmpfs), so a disabled keyboard never
+  survives a reboot
+- **No polling of the desktop**: the state is read from the udev database, so suspend/resume and
+  TTY toggles stay consistent
+
+## Requirements
+
+| Requirement | Why |
+| --- | --- |
+| `sudo` | The service calls the backend without a password prompt. |
+| `udevadm` | Re-announces the keyboard so libinput re-reads the ignore property. |
+| `sh` | The backend and the setup script are POSIX shell. |
+| A libinput-based compositor | niri, Hyprland, Sway and friends. The switch is on the libinput layer, so Xorg sessions are not supported. |
+| One-time root setup | `sudo internal-keyboard/setup.sh` (installs a CLI, one udev rule and one sudoers entry). |
+
+## Install
 
 ```sh
 git clone https://github.com/Goldppx/noctalia-internal-keyboard.git
 cd noctalia-internal-keyboard
-./install.sh --setup    # 注册源 + 启用插件 + 跑一次 root 后端安装
-sh tests/smoke.sh       # 自检
+./install.sh --setup    # registers the source, enables the plugin, runs the root backend setup
+sh tests/smoke.sh       # manifest / entries / translations / backend self-check
 ```
 
-后端需要一次 root（root 所有的 CLI、一条 udev 规则、一条只允许四个子命令的 sudoers 条目）：
+`setup.sh` is a normal, reviewable script. It lists the keyboards it can see, installs
+`/usr/local/bin/internal-keyboard`, renders
+`/etc/udev/rules.d/90-internal-keyboard.rules` for the selected keyboard, adds
+`/etc/sudoers.d/internal-keyboard` (passwordless `on`, `off`, `toggle`, `select` for that one
+root-owned script) and writes `/etc/internal-keyboard/device-name`. `uninstall.sh` reverses it.
+
+Then add the tile under **Settings → Control center → Shortcuts → Internal Keyboard**, or in
+`~/.config/noctalia/config.toml`:
+
+```toml
+[[control_center.shortcuts]]
+type = "goldesquemoon/internal-keyboard:toggle"
+```
+
+## Usage
+
+| Entry | Type | What it does |
+| --- | --- | --- |
+| `toggle` | control-center shortcut | Toggles the keyboard; highlighted means disabled, right click re-reads the backend. |
+| `keyboard` | bar widget | Same state and toggle from the bar; the tooltip shows the device. |
+| `service` | service | Owns polling, the OSD and the privileged calls. |
+
+No keybind is installed automatically. Bind it yourself (niri example):
+
+```kdl
+Mod+Shift+K { spawn-sh "noctalia msg plugin goldesquemoon/internal-keyboard:service all toggle"; }
+```
+
+Hyprland:
+
+```ini
+bind = SUPER SHIFT, K, exec, noctalia msg plugin goldesquemoon/internal-keyboard:service all toggle
+```
+
+Sway:
+
+```ini
+bindsym $mod+Shift+k exec noctalia msg plugin goldesquemoon/internal-keyboard:service all toggle
+```
+
+From a terminal or TTY:
 
 ```sh
-sudo internal-keyboard/setup.sh     # 等价于 ./install.sh --setup
+internal-keyboard status
+internal-keyboard devices    # keyboards that can be switched, * marks the current one
+internal-keyboard off
+internal-keyboard on
+internal-keyboard toggle
 ```
 
-脚本会先列出机器上的键盘，选中内置的那块（`i8042/serio0`），并把状态复位为「开」。
+## Settings
 
-依赖：
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `device` | `string` | empty | Keyboard to switch, by exact name (`internal-keyboard devices` lists them). Empty keeps the keyboard `setup.sh` picked. |
+| `show_osd` | `bool` | `true` | Show the OSD popup on every switch. |
+| `poll_interval` | `int` | `2000` | How often the tile and widget re-read the state, in milliseconds (minimum 500). |
+| `backend` | `string` | `/usr/local/bin/internal-keyboard` | Backend path, kept under the advanced toggle. |
 
-| 依赖 | 用途 |
-|---|---|
-| `sudo` | 磁贴/挂件免密调用后端 |
-| `udevadm` | 重新宣告设备，让 libinput 重读忽略属性 |
-| `sh` | 后端与安装脚本是 POSIX shell |
-| libinput 系合成器 | niri / Hyprland / Sway 等；Xorg 会话不支持 |
+Manifest settings only accept static dropdown options, so the keyboard is named rather than picked
+from a list — the setting description carries the command that lists the names.
 
-## 使用
-
-- **控制中心磁贴**：设置 → 控制中心 → 快捷方式 → 添加「Internal Keyboard」；高亮 = 已关闭
-- **栏挂件**：可选，点击切换，右键重新读取状态
-- **OSD**：每次切换弹出键盘图标的提示，可在设置里关闭（默认开）
-- **换哪块键盘**：设置 → 插件 → Internal Keyboard → `Keyboard` 填设备全名
-  （`internal-keyboard devices` 列出候选，留空 = setup.sh 选的那块）
-- **TTY / 终端**：
-
-  ```sh
-  internal-keyboard status     # state=on|off, device=..., available=0|1, nodes=...
-  internal-keyboard devices    # * 标出当前键盘
-  internal-keyboard off | on | toggle
-  ```
-
-- **键位**：插件不会替你写键位。想绑的话自己加：
-
-  ```kdl
-  Mod+Shift+K { spawn-sh "noctalia msg plugin goldesquemoon/internal-keyboard:service all toggle"; }
-  ```
-
-## 原理
+## How it works
 
 ```
-磁贴/挂件/键位 ──► service.luau ──sudo -n──► internal-keyboard off
-                                                │
-                     /run/internal-keyboard/disabled ◄─┘
-                                                │
-                          udevadm trigger --action=remove  (libinput 忘掉设备)
-                          udevadm trigger --action=add     (规则重跑)
-                                                │
-    /etc/udev/rules.d/90-internal-keyboard.rules → LIBINPUT_IGNORE_DEVICE=1
-                                                │
-                  libinput evdev_device_create() 丢掉设备 → 合成器收不到按键
+tile / widget / keybind ──► service ──sudo -n──► internal-keyboard off
+                                                    │
+                              /run/internal-keyboard/disabled ◄─┘
+                                                    │
+                       udevadm trigger --action=remove   (libinput forgets the device)
+                       udevadm trigger --action=add      (the rules run again)
+                                                    │
+         90-internal-keyboard.rules → LIBINPUT_IGNORE_DEVICE=1
+                                                    │
+                  libinput evdev_device_create() drops it → the compositor never sees it
 ```
 
-必须 remove+add，不能只发 `change`：libinput 只在设备 **add** 时读 `LIBINPUT_IGNORE_DEVICE`
-（`evdev_udev_handler` 只处理 add/remove，二进制里没有 `change` 字面量）。标志文件放在 `/run`
-（tmpfs），所以开机永远默认启用。
+remove+add rather than a plain udev `change` event is deliberate: libinput reads
+`LIBINPUT_IGNORE_DEVICE` **only when a device appears** (`evdev_udev_handler` handles `add` and
+`remove`), so a `change` event would do nothing. The flag lives in `/run` (tmpfs), which is why the
+keyboard always comes back enabled after a reboot.
 
-## 提交状态
+## FAQ
 
-| 项目 | 链接 |
-|---|---|
-| 社区插件 PR | <https://github.com/noctalia-dev/community-plugins/pull/1267>（Draft） |
-| 插件目录 | `internal-keyboard/`（`plugin.toml`、`README.md`、`thumbnail.webp`、`translations/en.json` 齐全） |
+**Can I get locked out?** Not from the TTY. Only libinput ignores the device; the kernel still
+delivers keys to the text console, so `Ctrl+Alt+F2` → `internal-keyboard on` always recovers, even
+if the external keyboard is dead.
 
-## 许可
+**Does it survive a reboot?** No — the flag is in `/run`, and enabling at boot is the design.
+If you want it to persist you would have to add your own flag outside `/run`.
+
+**Which compositors work?** Anything on libinput: niri, Hyprland, Sway, labwc, mango. Xorg is not
+supported, because `xinput disable` is a different mechanism.
+
+**The tile is greyed out.** `available=0`: the device is not present right now (docked laptop,
+external keyboard only). `internal-keyboard status` shows which name the plugin is looking for.
+
+**Is passwordless sudo safe here?** The sudoers entry names one root-owned script the user cannot
+modify, and only its `on` / `off` / `toggle` / `select` subcommands. `select` validates the name
+against the keyboards the kernel currently exposes before it renders the udev rule.
+
+**Can I switch only the numeric keypad or one interface of a combo device?** Yes, if the kernel
+exposes it as its own device: `internal-keyboard devices` lists every keyboard interface, and the
+`device` setting selects one by name.
+
+## 中文说明
+
+把笔记本内置键盘在图形会话里关掉（用外接键盘时），随时再打开。控制中心磁贴一键切换、可选的栏挂件、
+切换时的 OSD 提示。
+
+- 只关 **libinput** 这一层，`i8042`/`atkbd` 不动 —— 内核照样把按键送进 TTY，
+  所以键盘被关掉后 `Ctrl+Alt+F2` + `internal-keyboard on` 永远能救回来
+- 标志文件在 `/run`（tmpfs），**开机永远默认启用**
+- 可以选任意一块键盘：设置里的 `Keyboard` 填设备全名，`internal-keyboard devices` 列出候选
+- 后端需要一次 root：`sudo internal-keyboard/setup.sh`（一个 CLI + 一条 udev 规则 + 一条限定了
+  子命令的 sudoers 条目）
+- 依赖：`sudo`、`udevadm`、`sh` + libinput 系合成器（niri / Hyprland / Sway）
+
+## Search terms / 关键词
+
+Noctalia plugin, Noctalia v5, disable built-in keyboard, disable laptop keyboard, turn off internal
+keyboard, external keyboard, libinput, LIBINPUT_IGNORE_DEVICE, udev rule, evdev, Wayland, niri,
+Hyprland, Sway, control-center tile, bar widget, OSD, laptop keyboard switch, Arch Linux, CachyOS,
+禁用内置键盘, 关闭笔记本键盘, 外接键盘, 键盘开关
+
+## Links
+
+- Plugin source: [`internal-keyboard/`](internal-keyboard/)
+- Noctalia: <https://noctalia.dev>
+- Community plugin store: <https://noctalia.dev/plugins>
+- Community pull request (draft): <https://github.com/noctalia-dev/community-plugins/pull/1267>
+
+## License
 
 MIT
