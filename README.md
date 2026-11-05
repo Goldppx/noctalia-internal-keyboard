@@ -48,6 +48,10 @@ internal-keyboard off        # the graphical session stops seeing this keyboard
 
 ## Install
 
+**The easiest way is the Noctalia plugin store**: Settings -> Plugins -> Store -> search
+*Internal Keyboard* -> install, then click the tile once to run the privileged setup. The
+instructions below are for a source checkout.
+
 ```sh
 git clone https://github.com/Goldppx/noctalia-internal-keyboard.git
 cd noctalia-internal-keyboard
